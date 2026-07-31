@@ -1,0 +1,12 @@
+debug.sf.hw=1
+debug.egl.hw=1
+debug.hwui.force_hw_accel=true
+ro.config.enable.hw_accel=true
+persist.sys.composition.type=gpu
+debug.hwui.render_thread=true
+ro.hwui.render_thread=true
+
+windowsmgr.max_events_per_sec=200
+view.touch_slop=2
+view.minimum_fling_velocity=25
+ro.min_pointer_dur=8
