@@ -4,11 +4,14 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Stable-green?style=for-the-badge" alt="Status">
-  <img src="https://img.shields.io/badge/License-Open_Source-orange?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/badge/License-Apache%202.0-orange?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/Android-Universal-blue?style=for-the-badge&logo=android" alt="Android Version">
 </p>
 
 ---
+
+> [!WARNING]
+> **🚨 DEVICE BAN:** This module is strictly **BANNED** and will **NOT** work on the **Infinix GT 10 Pro (X6739)**. Installation will automatically abort if attempted on this device.
 
 ## 🚀 Overview
 
@@ -68,4 +71,5 @@ Get the latest news, updates, or support the development of this project by foll
   </a>
 </p>
 
-*Feel free to report bugs, give suggestions, or drop a donation to support the project via Telegram!*
+## 📄 License
+This project is licensed under the **Apache License 2.0**.
