@@ -3,5 +3,5 @@ name=RTI (Raw Touch Input) Universal
 version=v2.5
 versionCode=25
 author=kaminarich
-description=Disables IDC-level touch calibration/noise filtering to reduce touch-processing delay. Effect depends on each device's touch driver support.
+description=Disables IDC-level touch calibration and noise filtering to significantly reduce touch-processing delay. Provides a raw and highly responsive touch experience ideal for gaming. Effects may vary by device.
 banner=rti.webp
