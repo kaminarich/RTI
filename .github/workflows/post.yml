@@ -14,7 +14,7 @@ on:
       changelog:
         description: 'Release Changelog (Catatan rilis)'
         required: true
-        default: 'Bug fixes and performance improvements.'
+        default: ''
 
 jobs:
   build:
@@ -26,7 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # Mengambil riwayat commit terakhir untuk ditampilkan di Telegram
+          fetch-depth: 0 # Mengambil seluruh riwayat agar komit terbaru dapat dibaca dan di-push
 
       - name: Update module.prop
         run: |
@@ -36,7 +36,7 @@ jobs:
 
       - name: Generate update.json (For Auto-Update)
         run: |
-          # Otomatis membuat/mengupdate file update.json untuk notifikasi KernelSU
+          # Otomatis membuat/mengupdate file update.json
           cat <<EOF > update.json
           {
             "version": "${{ github.event.inputs.version }}",
@@ -54,7 +54,7 @@ jobs:
 
       - name: Create Module Zip
         run: |
-          # Memasukkan semua file ke dalam zip kecuali file github
+          # Memasukkan semua file ke dalam zip kecuali folder github dan zip lainnya
           zip -r9 RTI-${{ github.event.inputs.version }}.zip . -x "*.git*" -x ".github/*" -x "*.zip"
 
       - name: Create GitHub Release
@@ -74,27 +74,28 @@ jobs:
           SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
         run: |
+          # Mengambil nama modul dari baris name= di module.prop (serta menghapus karakter carriage return jika ada)
+          MODULE_NAME=$(grep '^name=' module.prop | cut -d'=' -f2- | tr -d '\r')
+
           # Mengambil pesan commit terakhir (judulnya saja)
           COMMIT_MSG=$(git log -1 --pretty=format:"%s")
           SHORT_SHA=${SHA::7}
-
-          # Karena workflow_dispatch tidak memiliki data 'compare' bawaan layaknya event 'push',
-          # link compare diarahkan ke daftar riwayat commit di branch tersebut.
           
+          # Menyusun pesan (caption) bahasa Indonesia, mengambil MODULE_NAME secara dinamis
           MESSAGE=$(cat <<EOF
-          📦 <b>Module Update</b>
+          <b>Pembaruan Modul ${MODULE_NAME}</b>
           
-          <b>Branch:</b> ${BRANCH}
-          <b>Commit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
-          <b>Compare:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">Lihat Perubahan</a>
-          <b>Workflow run:</b> <a href="https://github.com/${REPO}/actions/runs/${RUN_ID}">Log Eksekusi</a>
-          <b>Release:</b> <a href="https://github.com/${REPO}/releases/tag/${VERSION}">Download RTI ${VERSION}</a>
+          <b>Cabang:</b> ${BRANCH}
+          <b>Komit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
+          <b>Bandingkan:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">Lihat Perubahan</a>
+          <b>Log Eksekusi:</b> <a href="https://github.com/${REPO}/actions/runs/${RUN_ID}">Lihat Log</a>
+          <b>Rilis:</b> <a href="https://github.com/${REPO}/releases/tag/${VERSION}">Unduh ${VERSION}</a>
           EOF
           )
 
-          # Eksekusi curl untuk memanggil Telegram Bot API
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT}/sendMessage" \
-            -d chat_id="@Kaminarich_HeavenlyArchive" \
-            -d parse_mode="HTML" \
-            -d disable_web_page_preview="true" \
-            --data-urlencode text="$MESSAGE"
+          # Mengirim gambar rti.webp beserta caption menggunakan multipart/form-data (-F)
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
+            -F chat_id="@Kaminarich_HeavenlyArchive" \
+            -F photo="@rti.webp" \
+            -F parse_mode="HTML" \
+            -F caption="$MESSAGE"
