@@ -15,6 +15,7 @@ on:
         description: 'Release Changelog'
         required: true
         default: ''
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -134,24 +135,28 @@ jobs:
           # Ensure the file is actually readable (fixes permission edge cases from checkout)
           chmod 644 "$BANNER_PATH" || true
 
-          echo "Sending notification to Telegram..."
+          # --- TARGET CHANNELS ---
+          # Define an array of target channel usernames
+          CHATS=("@Kaminarich_HeavenlyArchive" "@Kaminarich_here")
 
-          # IMPORTANT: caption must use --form-string, not -F.
-          # The caption text starts with "<b>", and plain -F treats a leading "<"
-          # as "read this field's value from a local file", which is what was
-          # actually causing "curl: (26) Failed to open/read local data ..."
-          # (the photo file itself was never the problem).
-          HTTP_CODE=$(curl -sS -o /tmp/tg_response.json -w "%{http_code}" -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
-            --form-string "chat_id=@Kaminarich_HeavenlyArchive" \
-            -F "photo=@${BANNER_PATH}" \
-            --form-string "parse_mode=HTML" \
-            --form-string "caption=$MESSAGE")
+          # Loop through each chat and send the notification
+          for CHAT in "${CHATS[@]}"; do
+            echo "Sending notification to $CHAT..."
 
-          echo "Telegram API HTTP status: $HTTP_CODE"
-          cat /tmp/tg_response.json
-          echo ""
+            HTTP_CODE=$(curl -sS -o /tmp/tg_response.json -w "%{http_code}" -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
+              --form-string "chat_id=$CHAT" \
+              -F "photo=@${BANNER_PATH}" \
+              --form-string "parse_mode=HTML" \
+              --form-string "caption=$MESSAGE")
 
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "Error: Telegram API request failed (see response body above)."
-            exit 1
-          fi
+            echo "Telegram API HTTP status for $CHAT: $HTTP_CODE"
+            cat /tmp/tg_response.json
+            echo ""
+
+            if [ "$HTTP_CODE" -ne 200 ]; then
+              echo "Error: Telegram API request failed for $CHAT (see response body above)."
+              exit 1
+            fi
+          done
+
+          echo "All notifications sent successfully!"
