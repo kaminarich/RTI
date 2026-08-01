@@ -4,39 +4,38 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version Name (Contoh: v2.6)'
+        description: 'Version Name (Example: v2.6)'
         required: true
         default: 'v2.6'
       versionCode:
-        description: 'Version Code (Contoh: 26)'
+        description: 'Version Code (Example: 26)'
         required: true
         default: '26'
       changelog:
-        description: 'Release Changelog (Catatan rilis)'
+        description: 'Release Changelog'
         required: true
         default: ''
-
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Dibutuhkan untuk commit dan membuat Release
+      contents: write # Required for committing and creating a release
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Mengambil seluruh riwayat agar komit terbaru dapat dibaca dan di-push
+          fetch-depth: 0 # Fetch all history so the latest commit can be read and pushed
 
       - name: Update module.prop
         run: |
-          # Otomatis mengubah version & versionCode di module.prop
+          # Automatically update version & versionCode in module.prop
           sed -i "s/^version=.*/version=${{ github.event.inputs.version }}/g" module.prop
           sed -i "s/^versionCode=.*/versionCode=${{ github.event.inputs.versionCode }}/g" module.prop
 
       - name: Generate update.json (For Auto-Update)
         run: |
-          # Otomatis membuat/mengupdate file update.json
+          # Automatically create/update the update.json file
           cat <<EOF > update.json
           {
             "version": "${{ github.event.inputs.version }}",
@@ -54,7 +53,7 @@ jobs:
 
       - name: Create Module Zip
         run: |
-          # Memasukkan semua file ke dalam zip kecuali folder github dan zip lainnya
+          # Package all files into the zip, excluding git, github folders, and other zips
           zip -r9 RTI-${{ github.event.inputs.version }}.zip . -x "*.git*" -x ".github/*" -x "*.zip"
 
       - name: Create GitHub Release
@@ -74,28 +73,50 @@ jobs:
           SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          # Mengambil nama modul dari baris name= di module.prop (serta menghapus karakter carriage return jika ada)
-          MODULE_NAME=$(grep '^name=' module.prop | cut -d'=' -f2- | tr -d '\r')
+          echo "Checking directory contents (for debugging)..."
+          ls -la
+          
+          # Extract module name from module.prop (xargs is used to trim leading/trailing spaces)
+          MODULE_NAME=$(grep '^name=' module.prop | cut -d'=' -f2- | tr -d '\r' | xargs)
+          
+          # Extract banner file name from module.prop
+          BANNER_FILE=$(grep '^banner=' module.prop | cut -d'=' -f2- | tr -d '\r' | xargs)
+          
+          # Fallback if banner line is empty or missing
+          if [ -z "$BANNER_FILE" ]; then
+            BANNER_FILE="rti.webp"
+          fi
 
-          # Mengambil pesan commit terakhir (judulnya saja)
+          echo "Detected module name: '$MODULE_NAME'"
+          echo "Banner file to use: '$BANNER_FILE'"
+
+          # Get the last commit message (title only)
           COMMIT_MSG=$(git log -1 --pretty=format:"%s")
           SHORT_SHA=${SHA::7}
           
-          # Menyusun pesan (caption) bahasa Indonesia, mengambil MODULE_NAME secara dinamis
+          # Construct the message caption (in English, no emojis)
           MESSAGE=$(cat <<EOF
-          <b>Pembaruan Modul ${MODULE_NAME}</b>
+          <b>${MODULE_NAME} Update</b>
           
-          <b>Cabang:</b> ${BRANCH}
-          <b>Komit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
-          <b>Bandingkan:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">Lihat Perubahan</a>
-          <b>Log Eksekusi:</b> <a href="https://github.com/${REPO}/actions/runs/${RUN_ID}">Lihat Log</a>
-          <b>Rilis:</b> <a href="https://github.com/${REPO}/releases/tag/${VERSION}">Unduh ${VERSION}</a>
+          <b>Branch:</b> ${BRANCH}
+          <b>Commit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
+          <b>Compare:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">View Changes</a>
+          <b>Workflow Run:</b> <a href="https://github.com/${REPO}/actions/runs/${RUN_ID}">View Log</a>
+          <b>Release:</b> <a href="https://github.com/${REPO}/releases/tag/${VERSION}">Download ${VERSION}</a>
           EOF
           )
 
-          # Mengirim gambar rti.webp beserta caption menggunakan multipart/form-data (-F)
+          # Use GitHub Actions absolute path to ensure curl finds the file
+          FILE_PATH="$GITHUB_WORKSPACE/$BANNER_FILE"
+
+          if [ ! -f "$FILE_PATH" ]; then
+            echo "Error: Image file '$FILE_PATH' not found during workflow execution!"
+            exit 1
+          fi
+
+          echo "Sending notification to Telegram..."
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
             -F chat_id="@Kaminarich_HeavenlyArchive" \
-            -F photo="@rti.webp" \
+            -F photo="@${FILE_PATH}" \
             -F parse_mode="HTML" \
             -F caption="$MESSAGE"
