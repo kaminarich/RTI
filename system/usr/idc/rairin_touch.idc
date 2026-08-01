@@ -1,0 +1,17 @@
+touch.deviceType = touchScreen
+touch.orientationAware = 1
+touch.filter.level = 0
+touch.distance.scale = 0
+touch.gestureMode = spots
+touch.size.calibration = none
+touch.pressure.calibration = none
+touch.coverage.calibration = none
+touch.distance.calibration = none
+touch.orientation.calibration = none
+touch.resolution.calibration = none
+touch.enableForInactiveViewport = 1
+MultitouchSettleInterval = 0.1ms
+MultitouchMinDistance = 0.5px
+TapInterval = 0.5ms
+TapSlop = 0.5px
+mEnablePalmRejection = 0
