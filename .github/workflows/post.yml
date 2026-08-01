@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Fetch all history so the latest commit can be read and pushed
+          lfs: true # Ensures real binary content is pulled if the repo uses Git LFS for assets like banners
 
       - name: Update module.prop
         run: |
@@ -73,28 +74,34 @@ jobs:
           SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
         run: |
+          set -eo pipefail
+
           # Extract module name from module.prop
-          MODULE_NAME=$(grep '^name=' module.prop | cut -d'=' -f2- | tr -d '\r' | xargs)
-          
-          # Extract banner file name from module.prop
-          BANNER_FILE=$(grep '^banner=' module.prop | cut -d'=' -f2- | tr -d '\r' | xargs)
-          
+          MODULE_NAME=$(grep '^name=' module.prop | head -n1 | cut -d'=' -f2- | tr -d '\r' | xargs)
+
+          # Extract banner file name from module.prop (strip CR and any stray whitespace/control chars)
+          BANNER_FILE=$(grep '^banner=' module.prop | head -n1 | cut -d'=' -f2- | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
           # Fallback if banner line is empty or missing
           if [ -z "$BANNER_FILE" ]; then
             BANNER_FILE="rti.webp"
           fi
 
+          # Resolve to an absolute path so we validate and send the exact same file, no cwd ambiguity
+          BANNER_PATH="$(pwd)/${BANNER_FILE}"
+
           echo "Detected module name: '$MODULE_NAME'"
           echo "Banner file to use: '$BANNER_FILE'"
+          echo "Resolved banner path: '$BANNER_PATH'"
 
           # Get the last commit message (title only)
           COMMIT_MSG=$(git log -1 --pretty=format:"%s")
           SHORT_SHA=${SHA::7}
-          
+
           # Construct the message caption (in English, no emojis)
           MESSAGE=$(cat <<EOF
           <b>${MODULE_NAME} Update</b>
-          
+
           <b>Branch:</b> ${BRANCH}
           <b>Commit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
           <b>Compare:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">View Changes</a>
@@ -103,16 +110,43 @@ jobs:
           EOF
           )
 
-          if [ ! -f "$BANNER_FILE" ]; then
-            echo "Error: Image file '$BANNER_FILE' not found!"
+          # --- Diagnostics: confirm the file truly exists, is readable, and isn't a Git LFS pointer ---
+          if [ ! -f "$BANNER_PATH" ]; then
+            echo "Error: Image file '$BANNER_PATH' not found!"
+            echo "Repository root contents:"
+            ls -la "$(pwd)"
             exit 1
           fi
 
+          echo "File info:"
+          file "$BANNER_PATH" || true
+
+          FILE_SIZE=$(stat -c '%s' "$BANNER_PATH")
+          echo "File size: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 1000 ]; then
+            echo "Warning: '$BANNER_PATH' is suspiciously small for an image."
+            echo "This often means it's a Git LFS pointer file rather than the real banner."
+            echo "First lines of the file for inspection:"
+            head -c 300 "$BANNER_PATH"
+            echo ""
+          fi
+
+          # Ensure the file is actually readable (fixes permission edge cases from checkout)
+          chmod 644 "$BANNER_PATH" || true
+
           echo "Sending notification to Telegram..."
-          
-          # Fix: Gunakan --form-string untuk chat_id agar simbol '@' tidak dianggap sebagai file upload
-          curl -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
+
+          HTTP_CODE=$(curl -sS -o /tmp/tg_response.json -w "%{http_code}" -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
             --form-string "chat_id=@Kaminarich_HeavenlyArchive" \
-            -F "photo=@${BANNER_FILE}" \
+            -F "photo=@${BANNER_PATH}" \
             -F "parse_mode=HTML" \
-            -F "caption=$MESSAGE"
+            -F "caption=$MESSAGE")
+
+          echo "Telegram API HTTP status: $HTTP_CODE"
+          cat /tmp/tg_response.json
+          echo ""
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Error: Telegram API request failed (see response body above)."
+            exit 1
+          fi
