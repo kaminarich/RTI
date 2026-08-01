@@ -73,10 +73,7 @@ jobs:
           SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          echo "Checking directory contents (for debugging)..."
-          ls -la
-          
-          # Extract module name from module.prop (xargs is used to trim leading/trailing spaces)
+          # Extract module name from module.prop
           MODULE_NAME=$(grep '^name=' module.prop | cut -d'=' -f2- | tr -d '\r' | xargs)
           
           # Extract banner file name from module.prop
@@ -106,17 +103,16 @@ jobs:
           EOF
           )
 
-          # Use GitHub Actions absolute path to ensure curl finds the file
-          FILE_PATH="$GITHUB_WORKSPACE/$BANNER_FILE"
-
-          if [ ! -f "$FILE_PATH" ]; then
-            echo "Error: Image file '$FILE_PATH' not found during workflow execution!"
+          if [ ! -f "$BANNER_FILE" ]; then
+            echo "Error: Image file '$BANNER_FILE' not found!"
             exit 1
           fi
 
           echo "Sending notification to Telegram..."
-          curl -s -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
-            -F chat_id="@Kaminarich_HeavenlyArchive" \
-            -F photo="@${FILE_PATH}" \
-            -F parse_mode="HTML" \
-            -F caption="$MESSAGE"
+          
+          # Fix: Gunakan --form-string untuk chat_id agar simbol '@' tidak dianggap sebagai file upload
+          curl -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
+            --form-string "chat_id=@Kaminarich_HeavenlyArchive" \
+            -F "photo=@${BANNER_FILE}" \
+            -F "parse_mode=HTML" \
+            -F "caption=$MESSAGE"
