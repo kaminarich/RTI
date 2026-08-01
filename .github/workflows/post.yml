@@ -1,0 +1,100 @@
+name: Post Build and Release Module
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Name (Contoh: v2.6)'
+        required: true
+        default: 'v2.6'
+      versionCode:
+        description: 'Version Code (Contoh: 26)'
+        required: true
+        default: '26'
+      changelog:
+        description: 'Release Changelog (Catatan rilis)'
+        required: true
+        default: 'Bug fixes and performance improvements.'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Dibutuhkan untuk commit dan membuat Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Mengambil riwayat commit terakhir untuk ditampilkan di Telegram
+
+      - name: Update module.prop
+        run: |
+          # Otomatis mengubah version & versionCode di module.prop
+          sed -i "s/^version=.*/version=${{ github.event.inputs.version }}/g" module.prop
+          sed -i "s/^versionCode=.*/versionCode=${{ github.event.inputs.versionCode }}/g" module.prop
+
+      - name: Generate update.json (For Auto-Update)
+        run: |
+          # Otomatis membuat/mengupdate file update.json untuk notifikasi KernelSU
+          cat <<EOF > update.json
+          {
+            "version": "${{ github.event.inputs.version }}",
+            "versionCode": ${{ github.event.inputs.versionCode }},
+            "zipUrl": "https://github.com/${{ github.repository }}/releases/download/${{ github.event.inputs.version }}/RTI-${{ github.event.inputs.version }}.zip",
+            "changelog": "https://raw.githubusercontent.com/${{ github.repository }}/main/README.md"
+          }
+          EOF
+
+      - name: Commit and Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update version to ${{ github.event.inputs.version }}"
+          file_pattern: "module.prop update.json"
+
+      - name: Create Module Zip
+        run: |
+          # Memasukkan semua file ke dalam zip kecuali file github
+          zip -r9 RTI-${{ github.event.inputs.version }}.zip . -x "*.git*" -x ".github/*" -x "*.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: RTI ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.changelog }}
+          files: RTI-${{ github.event.inputs.version }}.zip
+
+      - name: Send Telegram Notification
+        env:
+          TG_BOT: ${{ secrets.TG_BOT }}
+          VERSION: ${{ github.event.inputs.version }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # Mengambil pesan commit terakhir (judulnya saja)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+          SHORT_SHA=${SHA::7}
+
+          # Karena workflow_dispatch tidak memiliki data 'compare' bawaan layaknya event 'push',
+          # link compare diarahkan ke daftar riwayat commit di branch tersebut.
+          
+          MESSAGE=$(cat <<EOF
+          📦 <b>Module Update</b>
+          
+          <b>Branch:</b> ${BRANCH}
+          <b>Commit:</b> <a href="https://github.com/${REPO}/commit/${SHA}">${SHORT_SHA}</a> - ${COMMIT_MSG}
+          <b>Compare:</b> <a href="https://github.com/${REPO}/commits/${BRANCH}">Lihat Perubahan</a>
+          <b>Workflow run:</b> <a href="https://github.com/${REPO}/actions/runs/${RUN_ID}">Log Eksekusi</a>
+          <b>Release:</b> <a href="https://github.com/${REPO}/releases/tag/${VERSION}">Download RTI ${VERSION}</a>
+          EOF
+          )
+
+          # Eksekusi curl untuk memanggil Telegram Bot API
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT}/sendMessage" \
+            -d chat_id="@Kaminarich_HeavenlyArchive" \
+            -d parse_mode="HTML" \
+            -d disable_web_page_preview="true" \
+            --data-urlencode text="$MESSAGE"
