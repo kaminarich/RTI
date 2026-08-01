@@ -1,0 +1,64 @@
+name: Build and Release Module
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version Name (Contoh: v2.6)'
+        required: true
+        default: 'v2.6'
+      versionCode:
+        description: 'Version Code (Contoh: 26)'
+        required: true
+        default: '26'
+      changelog:
+        description: 'Release Changelog (Catatan rilis)'
+        required: true
+        default: 'Bug fixes and performance improvements.'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Dibutuhkan untuk commit dan membuat Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update module.prop
+        run: |
+          # Otomatis mengubah version & versionCode di module.prop
+          sed -i "s/^version=.*/version=${{ github.event.inputs.version }}/g" module.prop
+          sed -i "s/^versionCode=.*/versionCode=${{ github.event.inputs.versionCode }}/g" module.prop
+
+      - name: Generate update.json (For Auto-Update)
+        run: |
+          # Otomatis membuat/mengupdate file update.json untuk notifikasi KernelSU
+          cat <<EOF > update.json
+          {
+            "version": "${{ github.event.inputs.version }}",
+            "versionCode": ${{ github.event.inputs.versionCode }},
+            "zipUrl": "https://github.com/kaminarich/RTI/releases/download/${{ github.event.inputs.version }}/RTI-${{ github.event.inputs.version }}.zip",
+            "changelog": "https://raw.githubusercontent.com/kaminarich/RTI/main/README.md"
+          }
+          EOF
+
+      - name: Commit and Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: update version to ${{ github.event.inputs.version }}"
+          file_pattern: "module.prop update.json"
+
+      - name: Create Module Zip
+        run: |
+          # Memasukkan semua file ke dalam zip kecuali file github
+          zip -r9 RTI-${{ github.event.inputs.version }}.zip . -x "*.git*" -x ".github/*" -x "*.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: RTI ${{ github.event.inputs.version }}
+          body: ${{ github.event.inputs.changelog }}
+          files: RTI-${{ github.event.inputs.version }}.zip
