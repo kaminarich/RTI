@@ -136,11 +136,16 @@ jobs:
 
           echo "Sending notification to Telegram..."
 
+          # IMPORTANT: caption must use --form-string, not -F.
+          # The caption text starts with "<b>", and plain -F treats a leading "<"
+          # as "read this field's value from a local file", which is what was
+          # actually causing "curl: (26) Failed to open/read local data ..."
+          # (the photo file itself was never the problem).
           HTTP_CODE=$(curl -sS -o /tmp/tg_response.json -w "%{http_code}" -X POST "https://api.telegram.org/bot${TG_BOT}/sendPhoto" \
             --form-string "chat_id=@Kaminarich_HeavenlyArchive" \
             -F "photo=@${BANNER_PATH}" \
-            -F "parse_mode=HTML" \
-            -F "caption=$MESSAGE")
+            --form-string "parse_mode=HTML" \
+            --form-string "caption=$MESSAGE")
 
           echo "Telegram API HTTP status: $HTTP_CODE"
           cat /tmp/tg_response.json
